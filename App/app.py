@@ -1,74 +1,46 @@
 import streamlit as st
-from ultralytics import YOLO
+import os
 from PIL import Image
 import numpy as np
-import os
 
-# Config
-st.set_page_config(page_title="PCBCheck", page_icon="🔍", layout="wide")
-
+# Model lazy loading (production safe)
 @st.cache_resource
 def load_model():
-    """Load your 98.1% mAP50 model"""
-    model_path = "./model/PCBCheck_best.pt"
-    if os.path.exists(model_path):
-        return YOLO(model_path)
-    else:
-        st.error("Model not found! Upload to model/PCBCheck_best.pt")
+    try:
+        from ultralytics import YOLO
+        return YOLO("./model/PCBCheck_best.pt")
+    except Exception as e:
+        st.error(f"Model loading failed: {e}")
         return None
 
+# Load model safely
 model = load_model()
 
-# Header
-st.markdown("""
-# 🔍 **PCBCheck** - Production PCB Defect Detection
-**98.1% mAP50 | 370 FPS | Live Deployed**
+st.set_page_config(page_title="PCBCheck", layout="wide")
 
-*Upload PCB → Instant defects with bounding boxes & confidence*
-""")
+st.markdown("# 🔍 **PCBCheck** - 98.1% PCB Defect Detection")
+st.markdown("*Production deployed | Upload → Instant results*")
 
-# Layout
 col1, col2 = st.columns([1, 1.2])
 
 with col1:
-    st.header("📸 **Upload PCB**")
-    uploaded_file = st.file_uploader(
-        "Drop image or click upload", 
-        type=['png', 'jpg', 'jpeg'],
-        help="Any PCB photo works!"
-    )
-    
+    uploaded_file = st.file_uploader("📸 Upload PCB", type=['png','jpg','jpeg'])
     if uploaded_file:
-        original = Image.open(uploaded_file)
-        st.image(original, caption="🔬 Analyzing...", use_column_width=True)
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Original", use_column_width=True)
 
 with col2:
     if uploaded_file and model:
-        with st.spinner("Detecting defects..."):
-            # Predict
+        with st.spinner("🔬 Detecting..."):
             img_array = np.array(Image.open(uploaded_file))
             results = model(img_array, conf=0.5, verbose=False)
-            
-            # Results
             annotated = results[0].plot()
             st.image(annotated, caption="✅ Defects Found!", use_column_width=True)
             
-            # Metrics
             boxes = results[0].boxes
-            if len(boxes) > 0:
-                st.success(f"**🎯 {len(boxes)} defects detected**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Precision", "95.6%")
-                with col2:
-                    st.metric("mAP50", "98.1%")
-            else:
-                st.balloons()
-                st.success("**✅ Perfect PCB!** No defects.")
+            defects = len(boxes) if boxes is not None else 0
+            st.success(f"**🎯 {defects} defects detected** (98.1% mAP50)")
+    elif uploaded_file:
+        st.warning("Model loading... Please wait or check model/PCBCheck_best.pt")
 
-# Footer
-st.markdown("---")
-st.markdown("""
-**Ayusham Mishra** | [GitHub](https://github.com/ayusham-mishra) | [LinkedIn](https://linkedin.com/in/ayusham)
-**Production: Docker + Railway + ONNX + 370 FPS inference**
-""")
+st.markdown("**Ayusham Mishra | Production MLOps Demo**")
